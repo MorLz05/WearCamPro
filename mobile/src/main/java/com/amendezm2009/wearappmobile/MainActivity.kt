@@ -666,3 +666,271 @@ fun listPhotoFiles(context: android.content.Context): List<File> {
     val dir = context.getExternalFilesDir(null)
     return dir?.listFiles { file -> file.name.startsWith("photo_") && file.name.endsWith(".jpg") }?.sortedByDescending { it.lastModified() } ?: emptyList()
 }
+@Composable
+fun MainWearScreen(
+    temperature: Float?,
+    heartRate: Float?,
+    battery: Int?,
+    cameraStatus: MainActivity.CameraStatus,
+    isProcessing: Boolean,
+    isCapturing: Boolean,
+    photoUri: String?,
+    onPrepareCamera: () -> Unit,
+    onCapturePhoto: () -> Unit,
+    onCancelCapture: () -> Unit,
+    onSyncClick: () -> Unit
+) {
+    ScalingLazyColumn(
+        modifier = Modifier.fillMaxSize().padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Header
+        item {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(vertical = 8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Camera,
+                    contentDescription = "Logo",
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colors.primary
+                )
+                Text(
+                    text = "WearCam Pro",
+                    style = MaterialTheme.typography.title1,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+                Text(
+                    text = "Cámara Remota",
+                    style = MaterialTheme.typography.body2,
+                    color = Color.Gray
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        // === CONTROLES DE CÁMARA ===
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { /* Acción opcional al hacer clic en toda la tarjeta */ }
+            )  {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Estado de la cámara
+                    val statusText = when (cameraStatus) {
+                        MainActivity.CameraStatus.IDLE -> "🔴 Inactiva"
+                        MainActivity.CameraStatus.PREPARING -> "🟡 Preparando..."
+                        MainActivity.CameraStatus.READY -> "🟢 Lista"
+                        MainActivity.CameraStatus.CAPTURING -> "📸 Capturando..."
+                        MainActivity.CameraStatus.CAPTURED -> "✅ Capturada"
+                        MainActivity.CameraStatus.ERROR -> "❌ Error"
+                        MainActivity.CameraStatus.CANCELLED -> "⏹️ Cancelada"
+                    }
+
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.body1,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    // Indicador visual de estado
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                when (cameraStatus) {
+                                    MainActivity.CameraStatus.READY -> Color(0xFF4CAF50)
+                                    MainActivity.CameraStatus.PREPARING -> Color(0xFFFF9800)
+                                    MainActivity.CameraStatus.CAPTURING -> Color(0xFFFF5722)
+                                    MainActivity.CameraStatus.CAPTURED -> Color(0xFF2196F3)
+                                    MainActivity.CameraStatus.ERROR -> Color(0xFFF44336)
+                                    MainActivity.CameraStatus.CANCELLED -> Color(0xFF9E9E9E)
+                                    else -> Color(0xFF9E9E9E)
+                                }
+                            )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Botones
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Botón Principal
+                        Button(
+                            onClick = {
+                                when (cameraStatus) {
+                                    MainActivity.CameraStatus.IDLE,
+                                    MainActivity.CameraStatus.CANCELLED,
+                                    MainActivity.CameraStatus.CAPTURED -> onPrepareCamera()
+                                    MainActivity.CameraStatus.READY -> onCapturePhoto()
+                                    else -> {}
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = when (cameraStatus) {
+                                    MainActivity.CameraStatus.READY -> Color(0xFF4CAF50)
+                                    MainActivity.CameraStatus.PREPARING -> Color(0xFFFF9800)
+                                    MainActivity.CameraStatus.CAPTURING -> Color(0xFFFF5722)
+                                    MainActivity.CameraStatus.CAPTURED -> Color(0xFF2196F3)
+                                    else -> MaterialTheme.colors.primary
+                                }
+                            ),
+                            enabled = cameraStatus != MainActivity.CameraStatus.CAPTURING && !isProcessing,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            val buttonText = when (cameraStatus) {
+                                MainActivity.CameraStatus.IDLE -> "📷 Preparar"
+                                MainActivity.CameraStatus.PREPARING -> "⏳ Esperando"
+                                MainActivity.CameraStatus.READY -> "📸 Tomar"
+                                MainActivity.CameraStatus.CAPTURING -> "⏳ Capturando"
+                                MainActivity.CameraStatus.CAPTURED -> "📷 Nueva"
+                                MainActivity.CameraStatus.ERROR -> "🔄 Reintentar"
+                                MainActivity.CameraStatus.CANCELLED -> "📷 Preparar"
+                            }
+                            Text(buttonText, modifier = Modifier.padding(horizontal = 4.dp))
+                        }
+
+                        // Botón Cancelar
+                        if (cameraStatus != MainActivity.CameraStatus.IDLE &&
+                            cameraStatus != MainActivity.CameraStatus.CANCELLED &&
+                            cameraStatus != MainActivity.CameraStatus.CAPTURED &&
+                            cameraStatus != MainActivity.CameraStatus.ERROR) {
+                            Button(
+                                onClick = onCancelCapture,
+                                colors = ButtonDefaults.buttonColors(
+                                    backgroundColor = Color(0xFFD32F2F)
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Filled.Close, contentDescription = "Cancelar", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // === SENSORES ===
+        item {
+            Text(
+                text = "📊 Sensores",
+                style = MaterialTheme.typography.title2,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        }
+
+        // Temperatura
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFD32F2F))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Thermostat, contentDescription = "Temperatura", tint = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Temperatura",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                    Text(
+                        text = "${temperature?.let { it.roundToInt().toString() } ?: "-"}°C",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        // Heart Rate
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFC62828))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Favorite, contentDescription = "Heart Rate", tint = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Ritmo Cardíaco",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                    Text(
+                        text = "${heartRate?.toInt()?.toString() ?: "-"} bpm",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        // Batería
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF2E7D32))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.BatteryFull, contentDescription = "Batería", tint = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Batería",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                    Text(
+                        text = "${battery?.toString() ?: "-"}%",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        // Botón sincronizar manual
+        item {
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(
+                onClick = onSyncClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = Color(0xFF4A148C)
+                )
+            ) {
+                Icon(Icons.Default.Sync, contentDescription = "Sincronizar", modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Sincronizar", fontSize = 12.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
