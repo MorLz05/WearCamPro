@@ -552,3 +552,117 @@ fun MainScreen(
         }
     }
 }
+@Composable
+fun PhotoGalleryScreen(activity: MainActivity, onBack: () -> Unit) {
+    val context = LocalContext.current
+    var photos by remember { mutableStateOf(listPhotoFiles(context)) }
+    var selectedPhoto by remember { mutableStateOf<File?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Galería de Fotos", style = MaterialTheme.typography.titleLarge)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (photos.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(64.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("No hay fotos disponibles")
+                }
+            }
+        } else {
+            LazyColumn {
+                items(photos) { file ->
+                    val bitmap = remember(file) { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp)
+                            .clickable { selectedPhoto = file },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap,
+                                    contentDescription = "Foto",
+                                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(64.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                file.name,
+                                modifier = Modifier.weight(1f),
+                                fontSize = 12.sp
+                            )
+                            IconButton(
+                                onClick = {
+                                    selectedPhoto = file
+                                    showDeleteDialog = true
+                                }
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Borrar", tint = Color.Red)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (selectedPhoto != null && !showDeleteDialog) {
+        Dialog(onDismissRequest = { selectedPhoto = null }) {
+            val bitmap = BitmapFactory.decodeFile(selectedPhoto!!.absolutePath)?.asImageBitmap()
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Foto grande",
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Text("No se pudo cargar la imagen")
+            }
+        }
+    }
+
+    if (showDeleteDialog && selectedPhoto != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("¿Borrar foto?") },
+            text = { Text("¿Seguro que deseas borrar esta foto?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedPhoto?.delete()
+                    photos = listPhotoFiles(context)
+                    showDeleteDialog = false
+                    selectedPhoto = null
+                }) { Text("Borrar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancelar") }
+            }
+        )
+    }
+}
+
+fun listPhotoFiles(context: android.content.Context): List<File> {
+    val dir = context.getExternalFilesDir(null)
+    return dir?.listFiles { file -> file.name.startsWith("photo_") && file.name.endsWith(".jpg") }?.sortedByDescending { it.lastModified() } ?: emptyList()
+}
